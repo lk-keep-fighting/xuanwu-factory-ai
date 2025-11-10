@@ -1,0 +1,104 @@
+"""Main orchestration logic for the AI coding workflow."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any, Dict
+
+from ai_coder import AICoder
+from commit_manager import CommitManager
+from git_manager import GitManager
+from webhook_client import WebhookClient
+
+
+class MainController:
+    """Coordinate cloning, coding, validation, and commit workflow."""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.git_mgr = GitManager()
+        self.ai_coder = AICoder(
+            api_key=config["api_key"],
+            model=config.get("model", "claude-3-sonnet-20240229"),
+            base_url=config.get("base_url"),
+        )
+        self.commit_mgr = CommitManager()
+        self.webhook = WebhookClient(config["webhook_url"], config.get("webhook_secret"))
+
+    async def execute_task(self, task_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the full AI coding workflow for a single task."""
+
+        task_id = task_config["task_id"]
+        repo_url = task_config["repo_url"]
+        intent = task_config.get("intent", "")
+        branch = task_config.get("branch", "main")
+        feature_branch = task_config.get("feature_branch")
+
+        if not repo_url:
+            raise ValueError("A repository URL is required")
+
+        await self._notify(task_id, "started", {})
+
+        try:
+            await self._notify(task_id, "cloning", {"repo": repo_url, "branch": branch})
+            repo_path = await self.git_mgr.clone_repository(
+                repo_url,
+                branch=branch,
+                credentials={
+                    "api_token": task_config.get("gitlab_api_token"),
+                    "username": task_config.get("git_username"),
+                    "password": task_config.get("git_password"),
+                },
+            )
+            if feature_branch:
+                self.git_mgr.create_feature_branch(feature_branch)
+
+            self.commit_mgr.attach_repo(self.git_mgr.repo)
+
+            await self._notify(task_id, "analyzing", {})
+            plan = await self.ai_coder.analyze_requirements(intent, repo_path)
+
+            await self._notify(task_id, "coding", {"plan": plan})
+            changes = await self.ai_coder.execute_code_changes(plan, repo_path)
+
+            await self._notify(task_id, "testing", {"changes": changes})
+            test_results = await self.ai_coder.validate_changes(repo_path)
+
+            await self._notify(task_id, "committing", {"test_results": test_results})
+            self.commit_mgr.stage_changes()
+
+            commit_hash: str | None = None
+            push_result: bool | None = None
+            try:
+                commit_hash = self.commit_mgr.create_commit(f"AI: {intent}")
+                push_branch = feature_branch or branch
+                push_result = self.commit_mgr.push_changes(branch=push_branch)
+            except ValueError:
+                # No staged changes – skip commit/push but continue gracefully.
+                push_result = False
+
+            result = {
+                "task_id": task_id,
+                "status": "completed",
+                "commit_hash": commit_hash,
+                "changes": changes,
+                "test_results": test_results,
+                "push_result": push_result,
+            }
+            await self._notify(task_id, "completed", result)
+            return result
+        except Exception as exc:  # noqa: BLE001 - propagate error details downstream
+            error_payload = {
+                "task_id": task_id,
+                "status": "failed",
+                "error": str(exc),
+            }
+            await self._notify(task_id, "failed", error_payload)
+            return error_payload
+
+    async def _notify(self, task_id: str, status: str, data: Dict[str, Any]) -> None:
+        try:
+            await self.webhook.send_status_update(task_id, status, data)
+        except Exception:
+            # Webhook failures should not interrupt the primary workflow.
+            await asyncio.sleep(0)
