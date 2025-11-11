@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import unicodedata
 from typing import Any, Dict
 
 from ai_coder import AICoder
@@ -32,7 +34,8 @@ class MainController:
         repo_url = task_config["repo_url"]
         intent = task_config.get("intent", "")
         branch = task_config.get("branch", "main")
-        feature_branch = task_config.get("feature_branch")
+        feature_branch_preference = task_config.get("feature_branch")
+        feature_branch: str | None = None
 
         if not repo_url:
             raise ValueError("A repository URL is required")
@@ -50,8 +53,11 @@ class MainController:
                     "password": task_config.get("git_password"),
                 },
             )
-            if feature_branch:
-                self.git_mgr.create_feature_branch(feature_branch)
+            feature_branch = self._generate_feature_branch_name(
+                feature_branch_preference or intent,
+                task_id,
+            )
+            self.git_mgr.create_feature_branch(feature_branch)
 
             self.commit_mgr.attach_repo(self.git_mgr.repo)
 
@@ -83,6 +89,7 @@ class MainController:
                 "commit_hash": commit_hash,
                 "changes": changes,
                 "test_results": test_results,
+                "feature_branch": feature_branch,
                 "push_result": push_result,
             }
             await self._notify(task_id, "completed", result)
@@ -95,6 +102,45 @@ class MainController:
             }
             await self._notify(task_id, "failed", error_payload)
             return error_payload
+
+    def _generate_feature_branch_name(
+        self,
+        preferred: str | None,
+        fallback: str,
+    ) -> str:
+        source = preferred or fallback or "feature"
+        normalized = unicodedata.normalize("NFKD", source)
+        ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+        sanitized = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
+
+        if not sanitized and fallback:
+            fallback_normalized = unicodedata.normalize("NFKD", fallback)
+            fallback_ascii = fallback_normalized.encode("ascii", "ignore").decode("ascii")
+            sanitized = re.sub(r"[^a-zA-Z0-9]+", "-", fallback_ascii).strip("-").lower()
+
+        if not sanitized:
+            sanitized = "feature"
+
+        sanitized = sanitized[:50].strip("-")
+        if not sanitized:
+            sanitized = "feature"
+
+        existing_branches = {head.name for head in self.git_mgr.repo.heads}
+        branch_name = sanitized
+        suffix = 1
+        while branch_name in existing_branches or len(branch_name) > 50 or not branch_name:
+            suffix_fragment = f"-{suffix}"
+            base_length = max(1, 50 - len(suffix_fragment))
+            base_segment = sanitized[:base_length].rstrip("-")
+            if not base_segment:
+                base_segment = "feature"
+            base_segment = base_segment[:base_length].rstrip("-")
+            if not base_segment:
+                base_segment = "f"
+            branch_name = f"{base_segment}{suffix_fragment}"
+            suffix += 1
+
+        return branch_name
 
     async def _notify(self, task_id: str, status: str, data: Dict[str, Any]) -> None:
         try:
