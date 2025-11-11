@@ -423,3 +423,172 @@ docker run ai-coder '{
 - Webhook: 最多重试 5 次
 
 这个文档提供了完整的实现指导，AI 可以根据这个结构生成可工作的代码。每个模块的职责明确，接口清晰，可以并行开发。
+
+## 9. 在 Kubernetes 中运行
+
+当前仓库默认提供 Docker 运行方式，如果希望在 Kubernetes 集群中运行（作为长驻服务或按需执行的任务），可以参考以下步骤。
+
+### 9.1 构建并推送镜像
+```
+docker build -t your-registry.example.com/ai-coder:latest .
+docker push your-registry.example.com/ai-coder:latest
+```
+
+确保集群节点能够访问镜像仓库，如有需要请配置 `imagePullSecrets`。
+
+### 9.2 配置密钥与环境变量
+敏感信息建议存放在 Secret 中，常规配置可存放在 ConfigMap 中。
+
+**Secret (`ai-coder-secrets.yaml`)**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-coder-secrets
+type: Opaque
+stringData:
+  ANTHROPIC_API_KEY: "sk-xxxxxxxx"
+  ANTHROPIC_BASE_URL: "https://third-party-llm.example.com/v1" # 可选
+  WEBHOOK_URL: "https://hook.example.com"
+  WEBHOOK_SECRET: "optional-secret"
+  GITLAB_API_TOKEN: "glpat-xxxxxxxx"
+```
+
+**ConfigMap (`ai-coder-config.yaml`)**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-coder-config
+data:
+  REPO_URL: "https://gitlab.com/xxx/project.git"
+  TASK_INTENT: "添加用户登录功能"
+  TASK_ID: "task-001"
+  GIT_USERNAME: "ai-coder-bot"
+  GIT_EMAIL: "ai-coder@company.com"
+  MODEL_NAME: "claude-3-sonnet-20240229"
+  MAX_ITERATIONS: "3"
+```
+
+创建资源：
+
+```
+kubectl apply -f ai-coder-secrets.yaml
+kubectl apply -f ai-coder-config.yaml
+```
+
+> 提示：如果某些配置不需要（例如未使用 WEBHOOK_SECRET 或 ANTHROPIC_BASE_URL），请同时从 Secret/ConfigMap 以及 Deployment 的 `env` 中移除对应条目，以避免引用不存在的键。
+
+### 9.3 部署应用
+以下示例使用 Deployment，如果希望只运行一次，可改用 Job 或 CronJob。
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-coder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-coder
+  template:
+    metadata:
+      labels:
+        app: ai-coder
+    spec:
+      containers:
+        - name: ai-coder
+          image: your-registry.example.com/ai-coder:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python"]
+          args: ["/app/main.py"]
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-coder-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: ANTHROPIC_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-coder-secrets
+                  key: ANTHROPIC_BASE_URL
+            - name: WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-coder-secrets
+                  key: WEBHOOK_URL
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ai-coder-secrets
+                  key: WEBHOOK_SECRET
+            - name: GITLAB_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai-coder-secrets
+                  key: GITLAB_API_TOKEN
+            - name: REPO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: REPO_URL
+            - name: TASK_INTENT
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: TASK_INTENT
+            - name: TASK_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: TASK_ID
+            - name: GIT_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: GIT_USERNAME
+            - name: GIT_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: GIT_EMAIL
+            - name: MODEL_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: MODEL_NAME
+            - name: MAX_ITERATIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: MAX_ITERATIONS
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: workspace
+          emptyDir: {}
+```
+
+应用部署：
+
+```
+kubectl apply -f ai-coder-deployment.yaml
+```
+
+### 9.4 运行与排障
+- 查看实时日志：`kubectl logs -f deploy/ai-coder`
+- 更新配置后滚动重启：`kubectl rollout restart deploy/ai-coder`
+- 临时进入容器排查：`kubectl exec -it deploy/ai-coder -- /bin/bash`
+- 如果希望任务一次性执行，可改用 Job，并在任务完成后让 Pod 自动清理。
