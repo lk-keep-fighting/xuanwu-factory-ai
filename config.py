@@ -11,14 +11,19 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 class Config:
     """Container for application configuration values."""
 
-    # AI configuration
-    ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
-    ANTHROPIC_BASE_URL: str | None = os.getenv("ANTHROPIC_BASE_URL")
-    MODEL_NAME: str = os.getenv("MODEL_NAME", "claude-3-sonnet-20240229")
+    # AI configuration - support both ANTHROPIC and OPENAI env vars
+    ANTHROPIC_API_KEY: str | None = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    ANTHROPIC_BASE_URL: str | None = os.getenv("OPENAI_BASE_URL") or os.getenv("ANTHROPIC_BASE_URL")
+    MODEL_NAME: str = os.getenv("OPENAI_MODEL") or os.getenv("MODEL_NAME", "claude-3-sonnet-20240229")
 
     # Git configuration
     GIT_USERNAME: str = os.getenv("GIT_USERNAME", "ai-coder-bot")

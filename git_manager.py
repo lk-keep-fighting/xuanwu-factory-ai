@@ -85,11 +85,12 @@ class GitManager:
                 return str(target_dir)
             except GitCommandError as exc:
                 last_error = exc
+                print(f"Clone attempt {attempt}/{retries} failed: {exc}")
                 if not local_path:
                     shutil.rmtree(target_dir, ignore_errors=True)
                 if attempt >= retries:
                     raise RuntimeError(
-                        f"Failed to clone repository after {retries} attempts"
+                        f"Failed to clone repository after {retries} attempts: {exc}"
                     ) from exc
                 await asyncio.sleep(2 ** (attempt - 1))
 

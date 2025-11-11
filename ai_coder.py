@@ -5,15 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import compileall
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
 import shutil
-
-try:
-    from anthropic import Anthropic
-except ImportError:  # pragma: no cover - dependency may be optional at runtime
-    Anthropic = None  # type: ignore
 
 
 class AICoder:
@@ -22,74 +18,93 @@ class AICoder:
     def __init__(self, api_key: str, model: str = "claude-3-sonnet-20240229", base_url: str | None = None) -> None:
         self.model = model
         self.api_key = api_key
-        if Anthropic is not None and api_key:
-            self.llm_client = Anthropic(api_key=api_key, base_url=base_url)
-        else:
-            self.llm_client = None
+        self.base_url = base_url
 
     async def analyze_requirements(self, intent: str, repo_path: str) -> Dict[str, Any]:
-        """Generate a plan for the requested changes."""
-
+        """Generate a plan for the requested changes (placeholder, actual work done by execute_code_changes)."""
         repo_summary = self._summarise_repository(Path(repo_path))
-
-        if not self.llm_client:
-            return self._default_plan(intent, repo_summary)
-
-        prompt = self._build_planning_prompt(intent, repo_summary)
-        try:
-            response = await asyncio.to_thread(
-                self.llm_client.messages.create,
-                model=self.model,
-                max_tokens=1024,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            content = "".join(block.text for block in response.content)
-            plan = json.loads(content)
-        except Exception:
-            plan = self._default_plan(intent, repo_summary)
-        return plan
+        return {
+            "intent": intent,
+            "repo_path": repo_path,
+            "files": [entry["path"] for entry in repo_summary.get("files", [])[:10]],
+            "changes": [],
+            "tests": [],
+        }
 
     async def execute_code_changes(self, plan: Dict[str, Any], repo_path: str) -> Dict[str, Any]:
-        """Apply code changes described in the plan."""
-
-        repo_base = Path(repo_path)
-        applied: List[str] = []
-        skipped: List[Dict[str, Any]] = []
-        for change in plan.get("changes", []):
-            file_path = change.get("file")
-            operation = change.get("operation", "write")
-            if not file_path:
-                skipped.append({"change": change, "reason": "missing file path"})
-                continue
-            target_path = repo_base / file_path
-            try:
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                if operation == "write":
-                    target_path.write_text(change.get("content", ""), encoding="utf-8")
-                elif operation == "append":
-                    with target_path.open("a", encoding="utf-8") as handle:
-                        handle.write(change.get("content", ""))
-                        if not change.get("content", "").endswith("\n"):
-                            handle.write("\n")
-                elif operation == "replace":
-                    search = change.get("search")
-                    replace = change.get("replace", "")
-                    if search is None:
-                        raise ValueError("replace operation requires 'search' field")
-                    original = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
-                    if search not in original:
-                        raise ValueError("search pattern not found")
-                    target_path.write_text(original.replace(search, replace), encoding="utf-8")
-                else:
-                    raise ValueError(f"Unsupported operation '{operation}'")
-                applied.append(f"{operation}:{file_path}")
-            except Exception as exc:  # noqa: BLE001 - propagate detail in result payload
-                skipped.append({
-                    "change": change,
-                    "reason": str(exc),
-                })
-        return {"applied": applied, "skipped": skipped}
+        """Execute code changes using Qwen Code CLI."""
+        intent = plan.get("intent", "")
+        
+        if not intent:
+            return {"applied": [], "skipped": [{"reason": "No task intent provided"}]}
+        
+        # Check if qwen CLI is available
+        qwen_path = shutil.which("qwen")
+        if not qwen_path:
+            print("Warning: qwen CLI not found, skipping AI coding")
+            return {"applied": [], "skipped": [{"reason": "qwen CLI not found"}]}
+        
+        # Prepare environment variables
+        env = os.environ.copy()
+        if self.api_key:
+            env["OPENAI_API_KEY"] = self.api_key
+            print(f"Set OPENAI_API_KEY: {self.api_key[:20]}...")
+        if self.base_url:
+            env["OPENAI_BASE_URL"] = self.base_url
+            print(f"Set OPENAI_BASE_URL: {self.base_url}")
+        if self.model:
+            env["OPENAI_MODEL"] = self.model
+            print(f"Set OPENAI_MODEL: {self.model}")
+        
+        # Execute qwen CLI
+        try:
+            print(f"Executing Qwen Code with task: {intent}")
+            print(f"Using model: {self.model}")
+            
+            # Build command arguments
+            # qwen uses positional prompt for one-shot mode (non-interactive)
+            cmd_args = [
+                qwen_path,
+                "--yolo",   # Skip permission prompts
+                intent,     # Positional prompt
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *cmd_args,
+                cwd=repo_path,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            
+            stdout_text = stdout.decode("utf-8", errors="ignore")
+            stderr_text = stderr.decode("utf-8", errors="ignore")
+            
+            if process.returncode == 0:
+                print(f"Qwen Code executed successfully")
+                print(f"Output: {stdout_text[:500]}")
+                return {
+                    "applied": ["qwen execution completed"],
+                    "skipped": [],
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                }
+            else:
+                print(f"Qwen Code failed with return code {process.returncode}")
+                print(f"Error: {stderr_text[:500]}")
+                return {
+                    "applied": [],
+                    "skipped": [{"reason": f"qwen failed: {stderr_text[:200]}"}],
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                }
+        except Exception as exc:
+            print(f"Failed to execute qwen: {exc}")
+            return {
+                "applied": [],
+                "skipped": [{"reason": f"Exception: {str(exc)}"}],
+            }
 
     async def validate_changes(self, repo_path: str) -> Dict[str, Any]:
         """Validate modified code via syntax checks and optional tests."""
