@@ -29,9 +29,9 @@ def _load_task_config() -> Dict[str, Any]:
 
 def _build_controller_config() -> Dict[str, Any]:
     return {
-        "api_key": Config.ANTHROPIC_API_KEY,
+        "api_key": Config.API_KEY,
         "model": Config.MODEL_NAME,
-        "base_url": Config.ANTHROPIC_BASE_URL,
+        "base_url": Config.BASE_URL,
         "webhook_url": Config.WEBHOOK_URL,
         "webhook_secret": Config.WEBHOOK_SECRET,
     }

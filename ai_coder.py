@@ -15,7 +15,7 @@ import shutil
 class AICoder:
     """Coordinate task analysis, execution, and validation."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-sonnet-20240229", base_url: str | None = None) -> None:
+    def __init__(self, api_key: str, model: str = "qwen-coder", base_url: str | None = None) -> None:
         self.model = model
         self.api_key = api_key
         self.base_url = base_url

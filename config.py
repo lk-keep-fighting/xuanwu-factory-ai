@@ -20,10 +20,10 @@ load_dotenv()
 class Config:
     """Container for application configuration values."""
 
-    # AI configuration - support both ANTHROPIC and OPENAI env vars
-    ANTHROPIC_API_KEY: str | None = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    ANTHROPIC_BASE_URL: str | None = os.getenv("OPENAI_BASE_URL") or os.getenv("ANTHROPIC_BASE_URL")
-    MODEL_NAME: str = os.getenv("OPENAI_MODEL") or os.getenv("MODEL_NAME", "claude-3-sonnet-20240229")
+    # AI configuration - use OpenAI-compatible environment variables for Qwen Code
+    API_KEY: str | None = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    BASE_URL: str | None = os.getenv("OPENAI_BASE_URL") or os.getenv("LLM_BASE_URL")
+    MODEL_NAME: str = os.getenv("OPENAI_MODEL") or os.getenv("MODEL_NAME", "qwen-coder")
 
     # Git configuration
     GIT_USERNAME: str = os.getenv("GIT_USERNAME", "ai-coder-bot")
@@ -49,8 +49,8 @@ class Config:
             ValueError: If a required configuration value is missing.
         """
 
-        if not cls.ANTHROPIC_API_KEY:
-            raise ValueError("ANTHROPIC_API_KEY is required")
+        if not cls.API_KEY:
+            raise ValueError("OPENAI_API_KEY or LLM_API_KEY is required")
         if cls.WEBHOOK_URL is None:
             raise ValueError("WEBHOOK_URL is required for status reporting")
         return True
@@ -66,8 +66,8 @@ class Config:
         """Return a serialisable snapshot of configuration values."""
 
         return {
-            "ANTHROPIC_API_KEY": cls.ANTHROPIC_API_KEY,
-            "ANTHROPIC_BASE_URL": cls.ANTHROPIC_BASE_URL,
+            "API_KEY": cls.API_KEY,
+            "BASE_URL": cls.BASE_URL,
             "MODEL_NAME": cls.MODEL_NAME,
             "GIT_USERNAME": cls.GIT_USERNAME,
             "GIT_EMAIL": cls.GIT_EMAIL,
