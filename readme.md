@@ -592,3 +592,33 @@ kubectl apply -f ai-coder-deployment.yaml
 - 更新配置后滚动重启：`kubectl rollout restart deploy/ai-coder`
 - 临时进入容器排查：`kubectl exec -it deploy/ai-coder -- /bin/bash`
 - 如果希望任务一次性执行，可改用 Job，并在任务完成后让 Pod 自动清理。
+
+### 9.5 docker run 风格的一键执行
+
+为了在 Kubernetes 中也能像 `docker run` 一样快速执行任务，仓库提供了 `k8s_runner.py` 脚本。该脚本会临时创建一个 Job、实时跟踪日志，并根据你的选择自动清理或保留资源。
+
+#### 基本用法
+
+```
+python k8s_runner.py \
+  --namespace ai-coder \
+  --env ANTHROPIC_API_KEY=sk-xxxxxxxx \
+  --env WEBHOOK_URL=https://hook.example.com \
+  --env TASK_INTENT="添加登录功能" \
+  your-registry.example.com/ai-coder:latest -- python /app/main.py
+```
+
+`command` 部分使用 `--` 与运行参数分隔（与 `docker run` 习惯一致），可以传递任意命令、脚本或参数。
+
+#### 自动销毁或保留
+
+- 默认启用 `--auto-clean`，任务结束后会删除 Job / Pod（含挂载的 `emptyDir`）。
+- 如需保留以便排查，可添加 `--keep`，脚本会输出后续手动删除的命令。
+
+#### 其他常用参数
+
+- `--entrypoint`：覆盖镜像内的入口命令。
+- `--request-cpu` / `--request-memory`：为容器声明资源请求，`--limit-cpu` / `--limit-memory` 则限制上限。
+- `--workspace-mount` / `--no-workspace`：控制是否挂载默认的临时工作目录。
+- `--image-pull-secret` / `--service-account`：指定镜像拉取凭据或 ServiceAccount。
+- `--context`：选择 kubeconfig 上下文，若未指定则自动读取当前上下文，或在集群内使用 service account。
