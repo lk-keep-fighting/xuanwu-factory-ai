@@ -11,7 +11,7 @@
 
 ### 技术栈
 - **语言**: Python 3.9+
-- **AI 模型**: Claude/OpenAI API（支持自定义第三方模型 URL + Key）
+- **AI 模型**: Qwen Code CLI（兼容 OpenAI API，可配置自定义服务 URL 和 Key）
 - **Git 操作**: GitPython
 - **Webhook**: aiohttp
 - **容器**: Docker
@@ -59,14 +59,16 @@ class GitManager:
 """
 
 class AICoder:
-    def __init__(self, api_key: str, model: str = "claude-3-sonnet-20240229", base_url: str | None = None):
-        self.llm_client = Anthropic(api_key=api_key, base_url=base_url)
+    def __init__(self, api_key: str, model: str = "qwen-coder", base_url: str | None = None):
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url
         
     async def analyze_requirements(self, intent: str, code_context: dict) -> dict:
         """分析需求并生成执行计划"""
         # 实现要点:
         # 1. 读取代码结构
-        # 2. 调用 Claude / 第三方兼容模型分析需求
+        # 2. 调用 Qwen Code CLI / 其他 OpenAI 兼容模型分析需求
         # 3. 生成修改计划 {files: [], changes: [], tests: []}
         
     async def execute_code_changes(self, plan: dict, repo_path: str) -> dict:
@@ -158,7 +160,7 @@ class MainController:
         self.git_mgr = GitManager()
         self.ai_coder = AICoder(
             api_key=config['api_key'],
-            model=config.get('model', 'claude-3-sonnet-20240229'),
+            model=config.get('model', 'qwen-coder'),
             base_url=config.get('base_url')
         )
         self.commit_mgr = CommitManager()
@@ -232,9 +234,9 @@ from typing import Dict, Any
 
 class Config:
     # AI 配置
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-    ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL")  # 第三方大模型服务地址
-    MODEL_NAME = os.getenv("MODEL_NAME", "claude-3-sonnet-20240229")
+    API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    BASE_URL = os.getenv("OPENAI_BASE_URL") or os.getenv("LLM_BASE_URL")  # OpenAI 兼容大模型服务地址
+    MODEL_NAME = os.getenv("OPENAI_MODEL", "qwen-coder")
     
     # Git 配置
     GIT_USERNAME = os.getenv("GIT_USERNAME", "ai-coder-bot")
@@ -252,8 +254,8 @@ class Config:
     @classmethod
     def validate(cls) -> bool:
         """验证必要配置"""
-        if not cls.ANTHROPIC_API_KEY:
-            raise ValueError("ANTHROPIC_API_KEY is required")
+        if not cls.API_KEY:
+            raise ValueError("OPENAI_API_KEY 或 LLM_API_KEY 必须设置")
         if cls.WEBHOOK_URL is None:
             raise ValueError("WEBHOOK_URL is required for status reporting")
         return True
@@ -291,9 +293,9 @@ async def main():
     
     # 执行任务
     controller = MainController({
-        "api_key": Config.ANTHROPIC_API_KEY,
+        "api_key": Config.API_KEY,
         "model": Config.MODEL_NAME,
-        "base_url": Config.ANTHROPIC_BASE_URL,
+        "base_url": Config.BASE_URL,
         "webhook_url": Config.WEBHOOK_URL,
         "webhook_secret": Config.WEBHOOK_SECRET
     })
@@ -337,11 +339,11 @@ CMD ["python", "/app/main.py"]
 ### 5.2 依赖文件 (`requirements.txt`)
 
 ```txt
-anthropic>=0.25.0
-gitpython>=3.1.40
+GitPython>=3.1.40
 aiohttp>=3.9.0
 pydantic>=2.0.0
 python-dotenv>=1.0.0
+kubernetes>=28.1.0
 ```
 
 ## 6. 使用方式
@@ -350,8 +352,8 @@ python-dotenv>=1.0.0
 
 ```bash
 # 必需配置
-export ANTHROPIC_API_KEY="your-claude-api-key"
-export ANTHROPIC_BASE_URL="https://third-party-llm.example.com/v1"  # 如使用第三方兼容 Claude 的服务
+export OPENAI_API_KEY="your-qwen-api-key"
+export OPENAI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"  # 如使用第三方 OpenAI 兼容服务
 export REPO_URL="https://github.com/username/repo.git"
 export TASK_INTENT="添加用户登录功能"
 export WEBHOOK_URL="https://your-webhook.com/endpoint"
@@ -362,6 +364,7 @@ export GIT_USERNAME="ai-coder-bot"
 export GIT_EMAIL="ai-coder@company.com"
 
 # 可选配置
+export OPENAI_MODEL="qwen-coder"
 export WEBHOOK_SECRET="your-secret"
 export TASK_ID="task_001"
 export MAX_ITERATIONS=3
@@ -372,8 +375,9 @@ export MAX_ITERATIONS=3
 ```bash
 # 方式1: 环境变量
 docker run \
-  -e ANTHROPIC_API_KEY=xxx \
-  -e ANTHROPIC_BASE_URL=https://third-party-llm.example.com/v1 \
+  -e OPENAI_API_KEY=xxx \
+  -e OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 \
+  -e OPENAI_MODEL=qwen-coder \
   -e REPO_URL=xxx \
   -e TASK_INTENT="添加登录功能" \
   -e WEBHOOK_URL=https://hook.example.com \
@@ -448,8 +452,8 @@ metadata:
   name: ai-coder-secrets
 type: Opaque
 stringData:
-  ANTHROPIC_API_KEY: "sk-xxxxxxxx"
-  ANTHROPIC_BASE_URL: "https://third-party-llm.example.com/v1" # 可选
+  OPENAI_API_KEY: "sk-xxxxxxxx"
+  OPENAI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1" # 可选
   WEBHOOK_URL: "https://hook.example.com"
   WEBHOOK_SECRET: "optional-secret"
   GITLAB_API_TOKEN: "glpat-xxxxxxxx"
@@ -468,7 +472,7 @@ data:
   TASK_ID: "task-001"
   GIT_USERNAME: "ai-coder-bot"
   GIT_EMAIL: "ai-coder@company.com"
-  MODEL_NAME: "claude-3-sonnet-20240229"
+  OPENAI_MODEL: "qwen-coder"
   MAX_ITERATIONS: "3"
 ```
 
@@ -479,7 +483,7 @@ kubectl apply -f ai-coder-secrets.yaml
 kubectl apply -f ai-coder-config.yaml
 ```
 
-> 提示：如果某些配置不需要（例如未使用 WEBHOOK_SECRET 或 ANTHROPIC_BASE_URL），请同时从 Secret/ConfigMap 以及 Deployment 的 `env` 中移除对应条目，以避免引用不存在的键。
+> 提示：如果某些配置不需要（例如未使用 WEBHOOK_SECRET 或 OPENAI_BASE_URL），请同时从 Secret/ConfigMap 以及 Deployment 的 `env` 中移除对应条目，以避免引用不存在的键。
 
 ### 9.3 部署应用
 以下示例使用 Deployment，如果希望只运行一次，可改用 Job 或 CronJob。
@@ -506,16 +510,21 @@ spec:
           command: ["python"]
           args: ["/app/main.py"]
           env:
-            - name: ANTHROPIC_API_KEY
+            - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-coder-secrets
-                  key: ANTHROPIC_API_KEY
-            - name: ANTHROPIC_BASE_URL
+                  key: OPENAI_API_KEY
+            - name: OPENAI_BASE_URL
               valueFrom:
                 secretKeyRef:
                   name: ai-coder-secrets
-                  key: ANTHROPIC_BASE_URL
+                  key: OPENAI_BASE_URL
+            - name: OPENAI_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-coder-config
+                  key: OPENAI_MODEL
             - name: WEBHOOK_URL
               valueFrom:
                 secretKeyRef:
@@ -602,7 +611,9 @@ kubectl apply -f ai-coder-deployment.yaml
 ```
 python k8s_runner.py \
   --namespace ai-coder \
-  --env ANTHROPIC_API_KEY=sk-xxxxxxxx \
+  --env OPENAI_API_KEY=sk-xxxxxxxx \
+  --env OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 \
+  --env OPENAI_MODEL=qwen-coder \
   --env WEBHOOK_URL=https://hook.example.com \
   --env TASK_INTENT="添加登录功能" \
   your-registry.example.com/ai-coder:latest -- python /app/main.py

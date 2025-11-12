@@ -21,7 +21,7 @@ class MainController:
         self.git_mgr = GitManager()
         self.ai_coder = AICoder(
             api_key=config["api_key"],
-            model=config.get("model", "claude-3-sonnet-20240229"),
+            model=config.get("model", "qwen-coder"),
             base_url=config.get("base_url"),
         )
         self.commit_mgr = CommitManager()
