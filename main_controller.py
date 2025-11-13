@@ -10,13 +10,14 @@ from typing import Any, Dict
 from ai_coder import AICoder
 from commit_manager import CommitManager
 from git_manager import GitManager
+from task_status import TaskStatusStore
 from webhook_client import WebhookClient
 
 
 class MainController:
     """Coordinate cloning, coding, validation, and commit workflow."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], status_store: TaskStatusStore | None = None):
         self.config = config
         self.git_mgr = GitManager()
         self.ai_coder = AICoder(
@@ -26,6 +27,7 @@ class MainController:
         )
         self.commit_mgr = CommitManager()
         self.webhook = WebhookClient(config["webhook_url"], config.get("webhook_secret"))
+        self.status_store = status_store
 
     async def execute_task(self, task_config: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the full AI coding workflow for a single task."""
@@ -143,6 +145,12 @@ class MainController:
         return branch_name
 
     async def _notify(self, task_id: str, status: str, data: Dict[str, Any]) -> None:
+        if self.status_store is not None:
+            try:
+                await self.status_store.update(task_id, status, data)
+            except Exception:
+                await asyncio.sleep(0)
+
         try:
             await self.webhook.send_status_update(task_id, status, data)
         except Exception:

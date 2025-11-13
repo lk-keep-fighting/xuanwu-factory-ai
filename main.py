@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 from config import Config
 from main_controller import MainController
+from task_status import TaskStatusServer, TaskStatusStore
 
 
 def _load_task_config() -> Dict[str, Any]:
@@ -40,8 +41,21 @@ def _build_controller_config() -> Dict[str, Any]:
 async def async_main() -> None:
     task_config = _load_task_config()
     Config.validate()
-    controller = MainController(_build_controller_config())
-    result = await controller.execute_task(task_config)
+
+    status_store = TaskStatusStore()
+    controller = MainController(_build_controller_config(), status_store=status_store)
+
+    if Config.STATUS_SERVER_ENABLED:
+        server = TaskStatusServer(
+            status_store,
+            host=Config.STATUS_SERVER_HOST,
+            port=Config.STATUS_SERVER_PORT,
+        )
+        async with server:
+            result = await controller.execute_task(task_config)
+    else:
+        result = await controller.execute_task(task_config)
+
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

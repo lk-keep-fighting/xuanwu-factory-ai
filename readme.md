@@ -145,6 +145,28 @@ class WebhookClient:
         }
 ```
 
+### 2.5 任务状态接口 (`task_status.py`)
+
+- 提供基于 aiohttp 的 `/task/status` GET 接口，实时返回当前任务的最新状态快照；
+- 返回字段包含 `task_id`、`status`、`updated_at`、`is_running` 以及任务步骤数据；
+- 默认监听 `STATUS_SERVER_HOST:STATUS_SERVER_PORT`（默认为 `0.0.0.0:8080`，可通过环境变量覆盖）；
+- 当没有任务执行时，接口返回 `status: "idle"` 并提示无任务运行。
+
+示例响应：
+
+```json
+{
+  "task_id": "task_001",
+  "status": "coding",
+  "is_running": true,
+  "updated_at": "2024-01-01T00:00:00+00:00",
+  "data": {
+    "plan": "...",
+    "changes": "..."
+  }
+}
+```
+
 ## 3. 主控流程 (`main_controller.py`)
 
 ```python
@@ -368,6 +390,9 @@ export OPENAI_MODEL="qwen-coder"
 export WEBHOOK_SECRET="your-secret"
 export TASK_ID="task_001"
 export MAX_ITERATIONS=3
+export STATUS_SERVER_ENABLED=true
+export STATUS_SERVER_HOST="0.0.0.0"
+export STATUS_SERVER_PORT=8080
 ```
 
 ### 6.2 运行命令
