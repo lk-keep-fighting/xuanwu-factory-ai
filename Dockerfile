@@ -1,19 +1,17 @@
-FROM python:3.11-slim
+FROM nexus.aimstek.cn/xuanwu/xuanwu-factory-base:python3.14-node24.11
 
 WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency definitions and source
 COPY requirements.txt .
 COPY . .
 
-# Install Python dependencies
+# Upgrade pip and install Python dependencies
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Qwen Code CLI via npm
+RUN npm install -g @qwen-code/qwen-code
 
 # Set default workspace directory
 WORKDIR /workspace

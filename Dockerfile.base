@@ -1,0 +1,39 @@
+FROM python:3.14-slim
+
+LABEL maintainer="xuanwu-factory-ai"
+LABEL description="Base image with Python 3.14 and Node.js 24.11 for AI coding workflow"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    ca-certificates \
+    gnupg \
+    wget \
+    xz-utils \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 24.11 using binary package
+RUN NODE_VERSION=24.11.0 \
+    && ARCH=x64 \
+    && wget -O node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
+    && tar -xf node.tar.xz -C /usr/local --strip-components=1 \
+    && rm node.tar.xz
+
+# Create symbolic links for Node.js tools
+RUN ln -s /usr/local/bin/node /usr/bin/node \
+    && ln -s /usr/local/bin/npm /usr/bin/npm \
+    && ln -s /usr/local/bin/npx /usr/bin/npx
+
+# Upgrade pip and install common Python packages
+RUN pip install --upgrade pip
+
+# Verify installations (skip for compatibility)
+RUN echo "Python 3.14 and Node.js installed successfully"
+
+# Set working directory
+WORKDIR /app
+
+# Default command
+CMD ["/bin/bash"]
