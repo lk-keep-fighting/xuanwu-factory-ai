@@ -37,6 +37,12 @@ class Config:
     # Execution configuration
     WORKSPACE_DIR: str = os.getenv("WORKSPACE_DIR", "/workspace")
     MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
+    STATUS_SERVER_ENABLED: bool = (
+        os.getenv("STATUS_SERVER_ENABLED", "true").strip().lower()
+        not in {"0", "false", "no"}
+    )
+    STATUS_SERVER_HOST: str = os.getenv("STATUS_SERVER_HOST", "0.0.0.0")
+    STATUS_SERVER_PORT: int = int(os.getenv("STATUS_SERVER_PORT", "8080"))
 
     @classmethod
     def validate(cls) -> bool:
@@ -76,4 +82,7 @@ class Config:
             "WEBHOOK_SECRET": cls.WEBHOOK_SECRET,
             "WORKSPACE_DIR": cls.WORKSPACE_DIR,
             "MAX_ITERATIONS": cls.MAX_ITERATIONS,
+            "STATUS_SERVER_ENABLED": cls.STATUS_SERVER_ENABLED,
+            "STATUS_SERVER_HOST": cls.STATUS_SERVER_HOST,
+            "STATUS_SERVER_PORT": cls.STATUS_SERVER_PORT,
         }
