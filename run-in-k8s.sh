@@ -9,7 +9,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 K8S_RUNNER="${SCRIPT_DIR}/k8s_runner.py"
-IMAGE_REGISTRY="nexus.aimstek.cn/xuanwu/xuanwu-factory-ai"
+IMAGE_REGISTRY="nexus.aimstek.cn/xuanwu/xuanwu-factory-ai:20251114-1326"
 
 # 颜色输出
 RED='\033[0;31m'

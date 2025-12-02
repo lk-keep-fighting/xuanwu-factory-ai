@@ -1,7 +1,8 @@
-FROM python:3.14-slim
+# 使用阿里云镜像仓库的 Python 基础镜像
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/python:3.11.13-slim
 
 LABEL maintainer="xuanwu-factory-ai"
-LABEL description="Base image with Python 3.14 and Node.js 24.11 for AI coding workflow"
+LABEL description="Base image with Python 3.11 and Node.js 24.11 for AI coding workflow"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -29,8 +30,8 @@ RUN ln -s /usr/local/bin/node /usr/bin/node \
 # Upgrade pip and install common Python packages
 RUN pip install --upgrade pip
 
-# Verify installations (skip for compatibility)
-RUN echo "Python 3.14 and Node.js installed successfully"
+# Verify installations
+RUN python --version && node --version && npm --version
 
 # Set working directory
 WORKDIR /app

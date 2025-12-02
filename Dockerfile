@@ -1,4 +1,4 @@
-FROM nexus.aimstek.cn/xuanwu/xuanwu-factory-base:python3.14-node24.11
+FROM nexus.aimstek.cn/xuanwu/xuanwu-factory-ai-base:python3.11-nodejs20
 
 WORKDIR /app
 
