@@ -78,7 +78,14 @@ class MainController:
             try:
                 commit_hash = self.commit_mgr.create_commit(f"AI: {intent}")
                 push_branch = feature_branch or branch
-                push_result = self.commit_mgr.push_changes(branch=push_branch)
+                push_result = self.commit_mgr.push_changes(
+                    branch=push_branch,
+                    credentials={
+                        "api_token": task_config.get("gitlab_api_token"),
+                        "username": task_config.get("git_username"),
+                        "password": task_config.get("git_password"),
+                    },
+                )
             except ValueError:
                 # No staged changes – skip commit/push but continue gracefully.
                 push_result = False

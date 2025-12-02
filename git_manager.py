@@ -52,6 +52,15 @@ class GitManager:
             raise ValueError("retries must be a positive integer")
 
         credentials = credentials or {}
+        
+        # 诊断日志
+        print(f"[GitManager] Cloning repository: {repo_url}")
+        print(f"[GitManager] Branch: {branch}")
+        print(f"[GitManager] Credentials provided: {list(credentials.keys())}")
+        if credentials.get("api_token"):
+            token = credentials["api_token"]
+            print(f"[GitManager] Token prefix: {token[:10] if len(token) > 10 else '***'}...")
+        
         prepared_url = self._prepare_repo_url(repo_url, credentials)
         last_error: Exception | None = None
 
@@ -151,7 +160,16 @@ class GitManager:
             auth_segment = None
 
             if api_token:
-                auth_segment = f"oauth2:{api_token}"
+                # For GitLab Personal Access Tokens (glpat-xxx):
+                # Use format: https://<any-username>:<token>@gitlab.com/...
+                # GitLab accepts any string as username when using a token as password
+                # Common choices: 'oauth2', 'gitlab-ci-token', or actual username
+                if "gitlab" in repo_url.lower():
+                    # Use 'gitlab-ci-token' as username for better compatibility
+                    auth_segment = f"gitlab-ci-token:{api_token}"
+                else:
+                    # For GitHub and other providers, use oauth2
+                    auth_segment = f"oauth2:{api_token}"
             elif username and password:
                 auth_segment = f"{username}:{password}"
             elif username:
